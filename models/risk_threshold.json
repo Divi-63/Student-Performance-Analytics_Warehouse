@@ -1,0 +1,5 @@
+{
+  "classification_threshold": 0.42,
+  "low_risk_threshold": 0.3,
+  "high_risk_threshold": 0.7
+}
