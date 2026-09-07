@@ -1,12 +1,8 @@
--- ============================================================
 -- Student Performance Analytics
 -- SQL Analytics Layer
--- ============================================================
 
 
--- ============================================================
 -- 1. Overall student and academic summary
--- ============================================================
 
 SELECT
     COUNT(*) AS total_students,
@@ -17,12 +13,10 @@ SELECT
 FROM fact_student_performance;
 
 
--- ============================================================
 -- 2. Observed historical at-risk summary
 --
 -- observed_at_risk = 1 when G3 < 10
 -- This is historical observed status, NOT ML prediction.
--- ============================================================
 
 SELECT
     COUNT(*) AS total_students,
@@ -34,9 +28,7 @@ SELECT
 FROM fact_student_performance;
 
 
--- ============================================================
 -- 3. Final grade distribution
--- ============================================================
 
 SELECT
     G3 AS final_grade,
@@ -46,9 +38,7 @@ GROUP BY G3
 ORDER BY G3;
 
 
--- ============================================================
 -- 4. Final grade bands
--- ============================================================
 
 SELECT
     CASE
@@ -75,9 +65,7 @@ ORDER BY
         WHEN grade_band = 'Excellent' THEN 4
     END;
 
--- ============================================================
 -- 5. Academic performance by school
--- ============================================================
 
 SELECT
     d.school_code,
@@ -101,9 +89,7 @@ GROUP BY
 ORDER BY average_g3 DESC;
 
 
--- ============================================================
 -- 6. Academic performance by gender
--- ============================================================
 
 SELECT
     s.sex,
@@ -121,9 +107,7 @@ JOIN fact_student_performance f
 GROUP BY s.sex
 ORDER BY average_g3 DESC;
 
--- ============================================================
 -- 7. Study time vs academic performance
--- ============================================================
 
 SELECT
     s.studytime,
@@ -140,9 +124,7 @@ JOIN fact_student_performance f
 GROUP BY s.studytime
 ORDER BY s.studytime;
 
--- ============================================================
 -- 8. Previous failures vs academic performance
--- ============================================================
 
 SELECT
     s.failures,
@@ -159,9 +141,7 @@ JOIN fact_student_performance f
 GROUP BY s.failures
 ORDER BY s.failures;
 
--- ============================================================
 -- 9. Absence bands vs academic performance
--- ============================================================
 
 SELECT
     CASE
@@ -202,9 +182,7 @@ ORDER BY
         WHEN absence_band = '21+' THEN 4
     END;
 
--- ============================================================
 -- 10. Mother's education vs academic performance
--- ============================================================
 
 SELECT
     s.Medu AS mother_education_level,
@@ -222,9 +200,7 @@ GROUP BY s.Medu
 ORDER BY s.Medu;
 
 
--- ============================================================
 -- 11. Father's education vs academic performance
--- ============================================================
 
 SELECT
     s.Fedu AS father_education_level,
@@ -242,9 +218,7 @@ GROUP BY s.Fedu
 ORDER BY s.Fedu;
 
 
--- ============================================================
 -- 12. Internet access vs academic performance
--- ============================================================
 
 SELECT
     s.internet AS internet_access,
@@ -263,9 +237,7 @@ GROUP BY s.internet
 ORDER BY s.internet;
 
 
--- ============================================================
 -- 13. Extracurricular activities vs academic performance
--- ============================================================
 
 SELECT
     s.activities AS extracurricular_activities,
@@ -284,9 +256,7 @@ GROUP BY s.activities
 ORDER BY s.activities;
 
 
--- ============================================================
 -- 14. School support vs academic performance
--- ============================================================
 
 SELECT
     s.schoolsup AS school_support,
@@ -304,9 +274,7 @@ GROUP BY s.schoolsup
 ORDER BY s.schoolsup;
 
 
--- ============================================================
 -- 15. Family support vs academic performance
--- ============================================================
 
 SELECT
     s.famsup AS family_support,

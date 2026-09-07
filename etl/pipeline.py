@@ -4,9 +4,7 @@ import sqlite3
 import pandas as pd
 
 
-# ============================================================
 # Paths
-# ============================================================
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -15,9 +13,8 @@ WAREHOUSE_DIR = PROJECT_ROOT / "warehouse"
 DATABASE_PATH = WAREHOUSE_DIR / "student_analytics.db"
 
 
-# ============================================================
 # Expected source schema
-# ============================================================
+# 
 
 EXPECTED_COLUMNS = [
     "school",
@@ -56,9 +53,7 @@ EXPECTED_COLUMNS = [
 ]
 
 
-# ============================================================
 # Extract
-# ============================================================
 
 def extract_data():
     """Read the source UCI dataset."""
@@ -75,9 +70,8 @@ def extract_data():
     return df
 
 
-# ============================================================
+
 # Validate
-# ============================================================
 
 def validate_data(df):
     """Validate the source dataset before transformation."""
@@ -184,9 +178,8 @@ def validate_data(df):
     print("Validation successful.")
 
 
-# ============================================================
+
 # Transform
-# ============================================================
 
 def transform_data(df):
     """
@@ -201,9 +194,7 @@ def transform_data(df):
 
     data = df.copy()
 
-    # --------------------------------------------------------
     # Dimension: School
-    # --------------------------------------------------------
 
     dim_school = pd.DataFrame(
         {
@@ -228,9 +219,7 @@ def transform_data(df):
         )
     )
 
-    # --------------------------------------------------------
     # Dimension: Student
-    # --------------------------------------------------------
 
     student_columns = [
     "school",
@@ -330,9 +319,7 @@ def transform_data(df):
 
     dim_student = dim_student[student_column_order]
 
-    # --------------------------------------------------------
     # Fact: Student Performance
-    # --------------------------------------------------------
 
     fact_student_performance = pd.DataFrame(
         {
@@ -355,9 +342,7 @@ def transform_data(df):
     }
 
 
-# ============================================================
 # Data Quality Checks
-# ============================================================
 
 def run_quality_checks(tables):
     """Run checks on transformed warehouse tables."""
@@ -431,9 +416,7 @@ def run_quality_checks(tables):
     print("Data-quality checks successful.")
 
 
-# ============================================================
 # Load
-# ============================================================
 
 def load_to_sqlite(tables):
     """Load warehouse tables into SQLite."""
@@ -557,9 +540,7 @@ def load_to_sqlite(tables):
     print(f"Warehouse created: {DATABASE_PATH}")
 
 
-# ============================================================
 # Main ETL Pipeline
-# ============================================================
 
 def main():
     print("Starting Student Performance ETL...")
