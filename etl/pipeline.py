@@ -14,7 +14,7 @@ DATABASE_PATH = WAREHOUSE_DIR / "student_analytics.db"
 
 
 # Expected source schema
-# 
+#
 
 EXPECTED_COLUMNS = [
     "school",
@@ -205,13 +205,13 @@ def transform_data(df):
             ],
         }
     )
-
+    #insert school key of 1 and 2 at column 0.
     dim_school.insert(
         0,
         "school_key",
         range(1, len(dim_school) + 1),
     )
-
+    #GP - 1 and MS - 2
     school_map = dict(
         zip(
             dim_school["school_code"],
@@ -420,7 +420,7 @@ def run_quality_checks(tables):
 
 def load_to_sqlite(tables):
     """Load warehouse tables into SQLite."""
-
+    #First make directory of Warehouse
     WAREHOUSE_DIR.mkdir(
         parents=True,
         exist_ok=True,

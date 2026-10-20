@@ -31,7 +31,7 @@ This system enables educational institutions to:
 3. **Assess Early Risk**: Identify students at risk of underperformance before grades are finalized, using only early-stage information
 4. **Support Decision-Making**: Provide educators with data-driven insights for intervention planning and resource allocation
 
-The project follows a modern data stack approach: raw data → validation → ETL → dimensional warehouse → analytics and machine learning.
+The project follows a warehouse-centered workflow: raw data → validation and ETL → SQLite dimensional warehouse → SQL analytics and warehouse-driven model training → saved model artifacts → Streamlit dashboard. The ML notebook now reconstructs its training dataset from SQL joins against the warehouse rather than reading the raw CSV directly.
 
 ## Objectives
 
@@ -45,15 +45,18 @@ The project follows a modern data stack approach: raw data → validation → ET
 
 ```mermaid
 graph LR
-    A["Raw Dataset<br/>student-mat.csv<br/>395 records"] --> B["ETL Pipeline<br/>pipeline.py<br/>Validation & Transform"]
-    B --> C["SQLite<br/>Warehouse<br/>student_analytics.db"]
+    A["Raw Dataset<br/>student-mat.csv<br/>395 records"] --> B["ETL Pipeline<br/>pipeline.py<br/>Validate, transform, load"]
+    B --> C["SQLite Warehouse<br/>student_analytics.db"]
     C --> D["SQL Analytics<br/>analytics.sql<br/>16 analytical queries"]
-    C --> E["ML Models<br/>Risk & Grade<br/>Prediction"]
-    D --> F["Streamlit<br/>Dashboard<br/>app.py"]
-    E --> F
-    G["Test Suite<br/>pytest"] --> B
-    G --> C
-    G --> E
+    C --> E["Notebook SQL Extraction<br/>Join dimensions and fact table"]
+    E --> F["Model Training and Evaluation<br/>Risk classifier and grade regressor"]
+    F --> G["Saved Artifacts<br/>Joblib models + threshold JSON"]
+    D --> H["Streamlit Dashboard<br/>app.py"]
+    C --> H
+    G --> H
+    I["Tests and Validation"] --> B
+    I --> C
+    I --> F
 ```
 
 **Pipeline Stages:**
@@ -63,8 +66,9 @@ graph LR
 3. **Transform**: Build dimensional tables (schools, students) and fact table (performance metrics)
 4. **Load**: Persist to SQLite warehouse with enforced foreign keys
 5. **Analyze**: Execute SQL queries for historical analytics
-6. **Predict**: Apply machine learning models for risk and grade predictions
-7. **Visualize**: Display insights and predictions through interactive dashboard
+6. **Build ML training data**: Query the warehouse by joining `dim_student`, `dim_school`, and `fact_student_performance`; select the original modeling columns and exclude warehouse surrogate keys
+7. **Train and evaluate**: Run the analysis notebook to prepare classification and regression datasets, tune models, evaluate performance, and save the model artifacts
+8. **Predict and visualize**: The dashboard combines warehouse-backed historical analytics with predictions from the saved model artifacts
 
 ## Dataset
 
@@ -273,10 +277,27 @@ The project implements two supervised learning tasks:
 
 **Target**: observed_at_risk (binary: 1 if G3 < 10, else 0)
 
+**Baseline Evaluation and Cross-Validation**:
+- The notebook compares Logistic Regression and Random Forest using accuracy, precision, recall, F1-score, and ROC-AUC.
+- It also calculates 5-fold stratified cross-validation metrics with `StratifiedKFold` (`n_splits=5`, `shuffle=True`, `random_state=42`).
+- In the current notebook, this baseline cross-validation is run on the full dataset (`X`, `y`), including rows later assigned to the holdout test split. Treat these baseline CV results as exploratory rather than as a fully isolated estimate of generalization. For a strict holdout workflow, change these calls to use `X_train`, `y_train`.
+
 **Hyperparameter Tuning**:
-- Algorithm: RandomizedSearchCV
-- Objective: Maximize F1 score (balances precision and recall for imbalanced classes)
-- Tuning parameters: n_estimators, max_depth, min_samples_split, min_samples_leaf
+- Algorithm: `RandomizedSearchCV` using the `StratifiedKFold` object above.
+- Search iterations: 30 randomly sampled hyperparameter combinations.
+- Objective: Maximize F1-score.
+- Parameters tuned: `n_estimators`, `max_depth`, `min_samples_split`, `min_samples_leaf`, and `max_features`.
+- The search is fitted on `X_train` and `y_train`; the selected estimator is refitted on the full training split.
+
+**Decision-Threshold Optimization**:
+- Generate out-of-fold risk probabilities from the training split using `cross_val_predict` with the tuned estimator and 5-fold stratified CV.
+- Evaluate candidate thresholds from 0.20 through 0.80.
+- Select the threshold with the highest F2-score among candidates with specificity of at least 0.50.
+- The uploaded notebook's recorded run selects a threshold of **0.42**.
+
+**Final Evaluation**:
+- Apply the selected threshold to probabilities for the held-out test split.
+- Report accuracy, precision, recall, F1, ROC-AUC, F2, confusion matrix, and classification report.
 
 **Output**:
 - Probability of at-risk (0–1 scale)
@@ -290,26 +311,31 @@ The project implements two supervised learning tasks:
 
 ### Task B: Final Grade Regression
 
-**Objective**: Predict the final mathematics grade (G3) based on student information and academic progress.
+**Objective**: Predict the final mathematics grade (`G3`) based on student information and academic progress.
 
-**Model**: RandomForestRegressor
+**Model selection**:
+- Compare Linear Regression, Random Forest, Gradient Boosting, and Extra Trees using 5-fold `KFold` cross-validation on the training split.
+- Select the model with the lowest cross-validated RMSE.
+- In the uploaded notebook's recorded run, **Random Forest** was selected. The selected algorithm may differ if the data or notebook changes.
 
-**Features**: All student attributes *except* G3; *includes* G1, G2 (32 features)
-- All early-stage attributes (from Task A)
-- Plus G1 and G2 (first and second period grades representing academic progression before final grade)
+**Features**: All student attributes *except* `G3`; includes `G1` and `G2` (32 features).
+- All early-stage attributes used by Task A
+- Plus `G1` and `G2`, representing academic progress before the final grade
 
-**Target**: G3 (0–20 scale)
+**Target**: `G3` (0–20 scale)
 
 **Hyperparameter Tuning**:
-- Algorithm: RandomizedSearchCV
-- Objective: Minimize mean squared error (standard for regression)
+- Algorithm: `RandomizedSearchCV` for the selected tree-based model; Linear Regression is fitted without hyperparameter search if it is selected.
+- Search iterations: 30 randomly sampled combinations.
+- Selection metric: negative RMSE (`neg_root_mean_squared_error`), equivalent to minimizing RMSE.
+- The search uses 5-fold `KFold` cross-validation on the training split.
 
-**Validated Metrics**:
+**Recorded holdout metrics from the uploaded notebook**:
 - **MAE** (Mean Absolute Error): 0.803
 - **RMSE** (Root Mean Squared Error): 1.232
 - **R²** (Coefficient of Determination): 0.928
 
-**Interpretation**: The model explains 92.8% of G3 variance and predicts final grades with average error of 0.8 points on the 0–20 scale.
+**Interpretation**: In this recorded run, the model explains 92.8% of the variance in `G3` on the held-out test split, with a mean absolute error of approximately 0.8 points on the 0–20 grade scale. These are run-specific results and may change when the model is retrained.
 
 **File**: `models/student_grade_model.joblib`
 
@@ -324,6 +350,19 @@ The project implements two supervised learning tasks:
   "high_risk_threshold": 0.7
 }
 ```
+
+### Warehouse-Driven Training Data
+
+**Notebook**: `notebooks/01_student_performance_analysis.ipynb`
+
+The notebook loads its modeling dataset from `warehouse/student_analytics.db` using SQL joins across `dim_student`, `dim_school`, and `fact_student_performance`. It selects the original student attributes and performance columns, aliases `observed_at_risk` as the risk target, and does not use warehouse-only surrogate identifiers as model features.
+
+The verified extracted dataset contains **395 rows and 34 columns** (33 source attributes plus the binary risk label). The notebook then creates two separate modeling datasets:
+
+- **Risk classification**: 30 features; excludes `G1`, `G2`, and `G3` to avoid using grade outcomes as inputs to early-risk prediction.
+- **Final-grade regression**: 32 features; includes `G1` and `G2`, but excludes `G3` from the inputs because it is the target.
+
+After successful notebook execution, the saved artifacts are written to `models/` and consumed by the dashboard. Re-run ETL first if the source dataset or warehouse data changes, then rerun the notebook to refresh the trained artifacts.
 
 ## Risk Interpretation
 
@@ -466,7 +505,7 @@ Interactive form for new student risk and grade assessment:
 pytest tests/ -v
 ```
 
-All 22 tests pass, confirming pipeline integrity, model validity, warehouse correctness, and SQL correctness.
+The repository's documented test suite contains 22 tests covering pipeline integrity, model validity, warehouse correctness, and SQL correctness. Run the command above in the current environment to confirm the present result.
 
 ## Project Structure
 
@@ -497,7 +536,7 @@ Student_Performance_Analytics/
 │   └── app.py                          # Streamlit interactive dashboard
 │
 ├── notebooks/
-│   └── 01_student_performance_analysis.ipynb  # Exploratory data analysis
+│   └── 01_student_performance_analysis.ipynb  # EDA + warehouse-driven model training
 │
 └── tests/
     ├── test_model.py                   # model validation tests
@@ -516,8 +555,8 @@ Student_Performance_Analytics/
 ### 1. Clone or Download Repository
 
 ```powershell
-# Navigate to the project directory
-cd "c:\Users\divya\Documents\Flask\Student_Performance_Analytics"
+# Navigate to the directory where you cloned the repository
+cd Student_Performance_Analytics
 ```
 
 ### 2. Create Virtual Environment
@@ -549,7 +588,23 @@ python etl/pipeline.py
 - Extracts, transforms, and loads data into `warehouse/student_analytics.db`
 - Confirms 395 records loaded successfully
 
-### 5. Run Tests (Optional)
+### 5. Train or Refresh the ML Models
+
+After the warehouse has been built, run the notebook to extract training data from SQLite, train and evaluate both models, and save the artifacts used by the dashboard:
+
+```powershell
+jupyter notebook notebooks/01_student_performance_analysis.ipynb
+```
+
+Open the notebook, select the project's Python environment as the kernel, and run all cells from top to bottom. The notebook expects the database at `warehouse/student_analytics.db` relative to the notebook's working directory. Confirm that these files are generated or updated successfully:
+
+- `models/student_risk_model.joblib`
+- `models/student_grade_model.joblib`
+- `models/risk_threshold.json`
+
+If the notebook is already open in Jupyter, you can simply restart the kernel and choose **Run All**.
+
+### 6. Run Tests (Optional)
 
 Validate pipeline, models, warehouse, and SQL:
 
@@ -557,9 +612,9 @@ Validate pipeline, models, warehouse, and SQL:
 pytest tests/ -v
 ```
 
-**Expected**: All 22 tests pass
+**Expected**: All 22 repository tests pass, provided the local environment and artifacts are correctly set up.
 
-### 6. Launch Dashboard
+### 7. Launch Dashboard
 
 Start the Streamlit web application:
 
@@ -569,9 +624,9 @@ streamlit run dashboard/app.py
 
 **Output**: Opens browser to `http://localhost:8501`
 
-The dashboard is now interactive; use filters to explore analytics or fill the prediction form to estimate student outcomes.
+The dashboard combines historical analytics from the SQLite warehouse with risk and grade predictions from the saved model artifacts. Use filters to explore analytics or fill the prediction form to estimate student outcomes.
 
-### 7. Explore SQL Analytics (Optional)
+### 8. Explore SQL Analytics (Optional)
 
 Execute analytical queries against the warehouse:
 
@@ -641,27 +696,32 @@ These patterns suggest that intervention strategies should prioritize students w
 
 ### Model Limitations
 
-1. **Correlation ≠ Causation**
+1. **Baseline Cross-Validation Scope**
+   - In the current notebook, the baseline 5-fold `cross_validate` calls for Logistic Regression and Random Forest use the full dataset (`X`, `y`) after a train/test split has already been created.
+   - This means the baseline CV summaries include rows that also appear in the later holdout test split; treat those baseline CV summaries as exploratory.
+   - For a strict evaluation protocol, run baseline cross-validation on `X_train`, `y_train` only, and keep `X_test`, `y_test` untouched until final evaluation.
+
+2. **Correlation ≠ Causation**
    - Higher study time correlates with better grades, but the model does not establish causality
    - Confounding factors (motivation, prior ability, home environment) are not disentangled
    - Predictions should *not* be interpreted as causal effects of interventions
 
-2. **Probability ≠ Certainty**
+3. **Probability ≠ Certainty**
    - A 0.72 early-risk probability means the model estimates 72% likelihood based on observed patterns
    - This is *not* certainty; model errors and data noise are inherent
    - Individual student outcomes are subject to unmeasured factors and human agency
 
-3. **Threshold Selection**
+4. **Threshold Selection**
    - The 0.42 intervention threshold is project-specific, chosen for operational balance
    - Different institutions may require different thresholds based on resource availability and risk tolerance
    - The threshold should be revisited when applied to new populations
 
-4. **Historical Bias**
+5. **Historical Bias**
    - The observed-risk definition (G3 < 10) reflects past outcomes, not future potential
    - Students marked as "at-risk" by this definition may have improved due to interventions
    - Predictions should not be used to deny opportunities or make irreversible decisions
 
-5. **Limited Feature Interaction**
+6. **Limited Feature Interaction**
    - Random Forest models capture feature interactions implicitly but do not make them explicit
    - Educational researchers may need to investigate specific interaction effects separately
    - The model does not indicate *why* a student is predicted at-risk, only *that* they are

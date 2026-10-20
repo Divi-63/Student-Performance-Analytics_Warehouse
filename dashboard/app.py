@@ -59,7 +59,8 @@ st.set_page_config(
 
 
 # Data and model loading
-
+"""Streamlit reruns the script whenever users interact with filters or widgets.
+Caching avoids repeatedly loading machine-learning models, reading configuration, and opening database connections, improving performance and reducing resource usage."""
 
 
 
@@ -278,7 +279,7 @@ def get_failure_performance(school, gender, age):
         GROUP BY s.failures
         ORDER BY s.failures;
     """
-
+    #If the parameter is NULL, accept every school. Otherwise, require the school to match
     school_filter = None if school == "All" else school
     gender_filter = None if gender == "All" else gender
     age_filter = None if age == "All" else age
